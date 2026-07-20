@@ -5,6 +5,7 @@ import { randomBackground } from '../data/backgrounds'
 import { FloatingShapes } from './FloatingShapes'
 import { BackgroundPhoto } from './BackgroundPhoto'
 import { MuteButton } from './MuteButton'
+import { ThemeButton } from './ThemeButton'
 
 interface Props {
   categories: Category[]
@@ -50,6 +51,7 @@ export function HomeScreen({ categories, onSelect }: Props) {
     >
       <BackgroundPhoto src={background} tint={['#FFFDF7', '#FFE9D6']} strength={0.66} />
       <FloatingShapes accent="#FF8C42" />
+      <ThemeButton accent="#FF8C42" />
       <MuteButton accent="#FF8C42" />
 
       <div

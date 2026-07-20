@@ -1,3 +1,4 @@
+import { type ReactNode } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import type { CategoryId, Item } from '../data/types'
 import { useHasRecording } from '../lib/recordings'
@@ -45,15 +46,16 @@ export function ItemCard({ item, categoryId, accent, isActive, onReplay }: Props
       )}
 
       {categoryId === 'counting' ? (
-        <CountingBody item={item} accent={accent} isActive={isActive} reduce={reduce} />
+        <CountingBody item={item} accent={accent} isActive={isActive} reduce={reduce} onReplay={onReplay} />
       ) : categoryId === 'abc' ? (
-        <AbcBody item={item} accent={accent} isActive={isActive} reduce={reduce} />
+        <AbcBody item={item} accent={accent} isActive={isActive} reduce={reduce} onReplay={onReplay} />
       ) : (
         <>
           <Illustration
             emoji={item.emoji}
             isActive={isActive}
             reduce={reduce}
+            onReplay={onReplay}
             className="text-[clamp(9rem,44vw,14rem)] leading-none"
           />
           <h2
@@ -76,23 +78,71 @@ export function ItemCard({ item, categoryId, accent, isActive, onReplay }: Props
   )
 }
 
+interface PlayfulDragProps {
+  reduce: boolean
+  onReplay?: () => void
+  className?: string
+  children: ReactNode
+}
+
+/**
+ * Wraps an illustration so a child can drag it around with a springy, snap-back
+ * bounce ("drag to play") — starting a drag also replays the sound. Drag is
+ * disabled when the user prefers reduced motion.
+ */
+function PlayfulDrag({ reduce, onReplay, className, children }: PlayfulDragProps) {
+  if (reduce) return <div className={className}>{children}</div>
+  return (
+    <motion.div
+      className={`${className ?? ''} cursor-grab active:cursor-grabbing`}
+      drag
+      dragSnapToOrigin
+      dragElastic={0.5}
+      dragConstraints={{ left: -70, right: 70, top: -70, bottom: 70 }}
+      dragTransition={{ bounceStiffness: 480, bounceDamping: 14 }}
+      whileTap={{ scale: 0.92 }}
+      onDragStart={() => onReplay?.()}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
 interface IllustrationProps {
   emoji: string
   isActive: boolean
   reduce: boolean
   className: string
+  onReplay?: () => void
 }
 
-/** Large emoji illustration that "pops" (0.8 → 1.05 → 1.0) when active. */
-function Illustration({ emoji, isActive, reduce, className }: IllustrationProps) {
+/** Large emoji that "pops" in, gently floats/wobbles while active, and is draggable. */
+function Illustration({ emoji, isActive, reduce, className, onReplay }: IllustrationProps) {
   return (
-    <motion.div
-      className={className}
-      animate={reduce ? { scale: 1 } : { scale: isActive ? POP : 0.92 }}
-      transition={reduce ? { duration: 0 } : { duration: 0.55, ease: POP_EASE }}
-    >
-      <span aria-hidden="true">{emoji}</span>
-    </motion.div>
+    <PlayfulDrag reduce={reduce} onReplay={onReplay} className={className}>
+      <motion.div
+        animate={
+          reduce
+            ? { scale: 1 }
+            : {
+                scale: isActive ? POP : 0.92,
+                rotate: isActive ? [0, -4, 0, 4, 0] : 0,
+                y: isActive ? [0, -8, 0] : 0,
+              }
+        }
+        transition={
+          reduce
+            ? { duration: 0 }
+            : {
+                scale: { duration: 0.55, ease: POP_EASE },
+                rotate: { duration: 3.6, repeat: Infinity, ease: 'easeInOut', delay: 0.4 },
+                y: { duration: 2.8, repeat: Infinity, ease: 'easeInOut', delay: 0.4 },
+              }
+        }
+      >
+        <span aria-hidden="true">{emoji}</span>
+      </motion.div>
+    </PlayfulDrag>
   )
 }
 
@@ -101,21 +151,40 @@ interface BodyProps {
   accent: string
   isActive: boolean
   reduce: boolean
+  onReplay?: () => void
 }
 
 /** Counting card: giant numeral + number word + that many bouncing stars. */
-function CountingBody({ item, accent, isActive, reduce }: BodyProps) {
+function CountingBody({ item, accent, isActive, reduce, onReplay }: BodyProps) {
   const count = item.count ?? 0
   return (
     <>
-      <motion.div
-        className="font-display font-black leading-none text-[clamp(7rem,40vw,11rem)]"
-        style={{ color: accent }}
-        animate={reduce ? { scale: 1 } : { scale: isActive ? POP : 0.92 }}
-        transition={reduce ? { duration: 0 } : { duration: 0.55, ease: POP_EASE }}
-      >
-        {item.title}
-      </motion.div>
+      <PlayfulDrag reduce={reduce} onReplay={onReplay}>
+        <motion.div
+          className="font-display font-black leading-none text-[clamp(7rem,40vw,11rem)]"
+          style={{ color: accent }}
+          animate={
+            reduce
+              ? { scale: 1 }
+              : {
+                  scale: isActive ? POP : 0.92,
+                  rotate: isActive ? [0, -3, 0, 3, 0] : 0,
+                  y: isActive ? [0, -6, 0] : 0,
+                }
+          }
+          transition={
+            reduce
+              ? { duration: 0 }
+              : {
+                  scale: { duration: 0.55, ease: POP_EASE },
+                  rotate: { duration: 3.6, repeat: Infinity, ease: 'easeInOut', delay: 0.4 },
+                  y: { duration: 2.8, repeat: Infinity, ease: 'easeInOut', delay: 0.4 },
+                }
+          }
+        >
+          {item.title}
+        </motion.div>
+      </PlayfulDrag>
       <p className="mt-1 font-display text-[2rem] font-bold text-slate-400">
         {item.subtitle}
       </p>
@@ -151,7 +220,7 @@ function CountingBody({ item, accent, isActive, reduce }: BodyProps) {
 }
 
 /** ABC card: uppercase + lowercase letters that flip in 3D, plus "A is for Apple". */
-function AbcBody({ item, accent, isActive, reduce }: BodyProps) {
+function AbcBody({ item, accent, isActive, reduce, onReplay }: BodyProps) {
   return (
     <>
       <div style={{ perspective: 800 }}>
@@ -169,6 +238,7 @@ function AbcBody({ item, accent, isActive, reduce }: BodyProps) {
         emoji={item.emoji}
         isActive={isActive}
         reduce={reduce}
+        onReplay={onReplay}
         className="mt-5 text-[clamp(4.5rem,22vw,7rem)] leading-none"
       />
       <p className="mt-5 font-display text-[clamp(2rem,7vw,2.5rem)] font-bold text-slate-500">

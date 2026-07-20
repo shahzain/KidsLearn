@@ -50,6 +50,14 @@ body {
   display: none;
 }
 
+/* Calm "bedtime" mode: soften, warm and gently dim the whole app. */
+.app-root {
+  transition: filter 0.4s ease;
+}
+.app-calm {
+  filter: saturate(0.72) brightness(0.9) sepia(0.12);
+}
+
 /* Honour users who prefer reduced motion: disable long/looping animations. */
 @media (prefers-reduced-motion: reduce) {
   *,

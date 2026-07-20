@@ -4,6 +4,7 @@ import { HomeScreen } from './components/HomeScreen'
 import { CategoryScreen } from './components/CategoryScreen'
 import { DrawingScreen } from './components/DrawingScreen'
 import { useSpeech } from './hooks/useSpeech'
+import { useTheme } from './hooks/useTheme'
 import animals from './data/animals'
 import birds from './data/birds'
 import counting from './data/counting'
@@ -39,6 +40,7 @@ function categoryFromHash(): CategoryId | null {
 export default function App() {
   const [activeId, setActiveId] = useState<CategoryId | null>(categoryFromHash)
   const { unlock, cancel } = useSpeech()
+  const [theme] = useTheme()
 
   const active = useMemo(
     () => CATEGORIES.find((c) => c.id === activeId) ?? null,
@@ -87,7 +89,11 @@ export default function App() {
   }, [goHome])
 
   return (
-    <div className="fixed inset-0 overflow-hidden font-body text-slate-800">
+    <div
+      className={`app-root fixed inset-0 overflow-hidden font-body text-slate-800 ${
+        theme === 'calm' ? 'app-calm' : ''
+      }`}
+    >
       <AnimatePresence mode="wait" initial={false}>
         {active ? (
           active.kind === 'draw' ? (
