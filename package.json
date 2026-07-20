@@ -1,0 +1,37 @@
+{
+  "name": "kidlearn",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "KidLearn — an installable, offline-first PWA that teaches Animals, Birds, Counting and the ABC to children ages 2–6.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview --host",
+    "generate-icons": "node scripts/generate-icons.mjs",
+    "fetch-sounds": "node scripts/fetch-sounds.mjs",
+    "convert-photos": "node scripts/convert-photos.mjs"
+  },
+  "dependencies": {
+    "@fontsource/baloo-2": "^5.1.0",
+    "@fontsource/nunito": "^5.1.0",
+    "framer-motion": "^11.11.17",
+    "howler": "^2.2.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/howler": "^2.2.12",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "heic-convert": "^2.1.0",
+    "postcss": "^8.4.49",
+    "sharp": "^0.33.5",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vite-plugin-pwa": "^0.21.1"
+  }
+}
