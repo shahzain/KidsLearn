@@ -29,8 +29,15 @@ const CATEGORIES = [
   drawing,
 ]
 
+/** Read the active category id from the URL hash, e.g. "#animals". */
+function categoryFromHash(): CategoryId | null {
+  if (typeof window === 'undefined') return null
+  const id = window.location.hash.replace(/^#/, '')
+  return CATEGORIES.some((c) => c.id === id) ? (id as CategoryId) : null
+}
+
 export default function App() {
-  const [activeId, setActiveId] = useState<CategoryId | null>(null)
+  const [activeId, setActiveId] = useState<CategoryId | null>(categoryFromHash)
   const { unlock, cancel } = useSpeech()
 
   const active = useMemo(
@@ -43,7 +50,9 @@ export default function App() {
       // Unlock iOS audio inside the tap gesture so snap auto-speech works.
       unlock()
       setActiveId(id)
-      window.history.pushState({ category: id }, '')
+      // Use a hash so the browser's back gesture is a same-document change
+      // (no reload), exactly like the on-screen back button.
+      window.history.pushState({ category: id }, '', `#${id}`)
     },
     [unlock],
   )
@@ -53,18 +62,24 @@ export default function App() {
     setActiveId(null)
   }, [cancel])
 
-  // Hardware / gesture "back" returns to the home screen.
+  // Keep the screen in sync with the URL hash for every kind of "back": the
+  // on-screen button, the hardware button, and the edge-swipe gesture. Because
+  // it's a hash change, none of these reload the page.
   useEffect(() => {
-    const onPop = () => {
+    const sync = () => {
       cancel()
-      setActiveId(null)
+      setActiveId(categoryFromHash())
     }
-    window.addEventListener('popstate', onPop)
-    return () => window.removeEventListener('popstate', onPop)
+    window.addEventListener('popstate', sync)
+    window.addEventListener('hashchange', sync)
+    return () => {
+      window.removeEventListener('popstate', sync)
+      window.removeEventListener('hashchange', sync)
+    }
   }, [cancel])
 
   const handleBack = useCallback(() => {
-    if (window.history.state?.category) {
+    if (window.location.hash) {
       window.history.back()
     } else {
       goHome()
