@@ -10,6 +10,7 @@ permissions:
   pages: write
   id-token: write
 
+# Allow only one deployment at a time; don't cancel a run that's mid-deploy.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -30,44 +31,38 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # GitHub Pages *project* sites live at /<repo>/, user/org sites at /.
+      # Derive the correct Vite base automatically from the repo name.
       - name: Compute base path
         id: base
         run: |
           repo="${{ github.event.repository.name }}"
-          owner="${{ github.repository_owner }}name: Deploy to GitHub Pages
+          owner="${{ github.repository_owner }}"
+          repo_lc=$(echo "$repo" | tr '[:upper:]' '[:lower:]')
+          owner_lc=$(echo "$owner" | tr '[:upper:]' '[:lower:]')
+          if [ "$repo_lc" = "${owner_lc}.github.io" ]; then
+            echo "value=/" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=/${repo}/" >> "$GITHUB_OUTPUT"
+          fi
 
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+      - name: Build
+        run: npm run build
+        env:
+          VITE_BASE: ${{ steps.base.outputs.value }}
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          node-version: 20
-          cache: npm
+          path: ./dist
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Compute base path
-        id: base
-        run: |
-          repo="${{ github.event.repository.name }}"
-          owner="${{ github.repository_owner }}
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
