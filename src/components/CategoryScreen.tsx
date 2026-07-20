@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import type { Category } from '../data/types'
+import type { Category, Item } from '../data/types'
 import { useSnapScroll } from '../hooks/useSnapScroll'
 import { useSpeech } from '../hooks/useSpeech'
+import { useMuted } from '../hooks/useMuted'
 import { randomBackground } from '../data/backgrounds'
+import { getRecording, hasRecording } from '../lib/recordings'
 import { ItemCard } from './ItemCard'
 import { BackButton } from './BackButton'
+import { MuteButton } from './MuteButton'
 import { FloatingShapes } from './FloatingShapes'
 import { BackgroundPhoto } from './BackgroundPhoto'
 
@@ -26,21 +29,67 @@ export function CategoryScreen({ category, onBack }: Props) {
     category.items.length,
   )
   const { speak, cancel } = useSpeech()
+  const [muted] = useMuted()
+  const recAudioRef = useRef<HTMLAudioElement | null>(null)
+  const announceIdRef = useRef(0)
 
-  // Auto-speak the active card whenever it snaps into view (incl. the first).
+  const stopRecording = useCallback(() => {
+    if (recAudioRef.current) {
+      recAudioRef.current.pause()
+      recAudioRef.current = null
+    }
+  }, [])
+
+  // Say a card out loud: play the parent's recording if there is one, otherwise
+  // speak it. Used both on snap and when a card is tapped again. Silent (and
+  // stops any playback) when muted.
+  const announce = useCallback(
+    (item: Item, force = false) => {
+      const runId = ++announceIdRef.current
+      stopRecording()
+      cancel()
+      if (muted && !force) return
+
+      const speakIt = () =>
+        speak(item.speak, {
+          soundUrl: item.soundUrl,
+          lang: item.speakLang,
+          roman: item.speakRoman,
+        })
+
+      if (hasRecording(item.id)) {
+        void getRecording(item.id).then((blob) => {
+          if (announceIdRef.current !== runId) return
+          if (!blob) {
+            speakIt()
+            return
+          }
+          const url = URL.createObjectURL(blob)
+          const audio = new Audio(url)
+          audio.onended = () => URL.revokeObjectURL(url)
+          recAudioRef.current = audio
+          audio.play().catch(() => {})
+        })
+        return
+      }
+      speakIt()
+    },
+    [muted, speak, cancel, stopRecording],
+  )
+
+  // Auto-announce the active card whenever it snaps into view (incl. the first).
   useEffect(() => {
     const item = category.items[activeIndex]
     if (!item) return
-    const timer = window.setTimeout(
-      () => speak(item.speak, { soundUrl: item.soundUrl }),
-      280,
-    )
-    // On card change / unmount: stop the current word AND animal sound at once.
+    const timer = window.setTimeout(() => announce(item), 280)
+    // On card change / unmount: stop the word, sound and any recording at once.
     return () => {
       window.clearTimeout(timer)
+      announceIdRef.current += 1
       cancel()
+      stopRecording()
     }
-  }, [activeIndex, category.items, speak, cancel])
+  }, [activeIndex, category.items, announce, cancel, stopRecording])
 
   return (
     <motion.div
@@ -60,6 +109,7 @@ export function CategoryScreen({ category, onBack }: Props) {
       <BackgroundPhoto src={background} tint={category.bgGradient} strength={0.55} />
       <FloatingShapes accent={category.accent} />
       <BackButton onClick={onBack} accent={category.accent} />
+      <MuteButton accent={category.accent} />
 
       <div
         ref={containerRef}
@@ -77,6 +127,7 @@ export function CategoryScreen({ category, onBack }: Props) {
               categoryId={category.id}
               accent={category.accent}
               isActive={index === activeIndex}
+              onReplay={() => announce(item, true)}
             />
           </section>
         ))}

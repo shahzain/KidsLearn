@@ -1,11 +1,15 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import type { CategoryId, Item } from '../data/types'
+import { useHasRecording } from '../lib/recordings'
+import { RecordButton } from './RecordButton'
 
 interface Props {
   item: Item
   categoryId: CategoryId
   accent: string
   isActive: boolean
+  /** Called when the card is tapped, to play its sound again. */
+  onReplay?: () => void
 }
 
 // Subtle "pop" keyframe used whenever a card snaps into view.
@@ -17,12 +21,14 @@ const POP_EASE = [0.34, 1.4, 0.5, 1] as const
  * the category (animals/birds, counting, or ABC) and animates when it becomes
  * the active (snapped) card.
  */
-export function ItemCard({ item, categoryId, accent, isActive }: Props) {
+export function ItemCard({ item, categoryId, accent, isActive, onReplay }: Props) {
   const reduce = !!useReducedMotion()
+  const recorded = useHasRecording(item.id)
 
   return (
     <motion.div
-      className="relative flex w-full max-w-[440px] flex-col items-center justify-center rounded-[2rem] bg-white/95 px-6 py-10 text-center shadow-card"
+      onClick={onReplay}
+      className="relative flex w-full max-w-[440px] cursor-pointer select-none flex-col items-center justify-center rounded-[2rem] bg-white/95 px-6 py-10 text-center shadow-card"
       style={{ height: 'min(78dvh, 680px)' }}
       animate={reduce ? {} : { y: isActive ? 0 : 10, opacity: isActive ? 1 : 0.72 }}
       transition={{ duration: 0.4 }}
@@ -31,6 +37,12 @@ export function ItemCard({ item, categoryId, accent, isActive }: Props) {
         className="absolute top-5 h-2 w-16 rounded-full"
         style={{ background: accent, opacity: 0.5 }}
       />
+      <RecordButton itemId={item.id} accent={accent} />
+      {recorded && (
+        <span className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-full bg-emerald-500 px-2.5 py-1 text-sm font-bold text-white shadow-soft">
+          <span aria-hidden="true">🎙️</span> Your voice
+        </span>
+      )}
 
       {categoryId === 'counting' ? (
         <CountingBody item={item} accent={accent} isActive={isActive} reduce={reduce} />
@@ -45,7 +57,10 @@ export function ItemCard({ item, categoryId, accent, isActive }: Props) {
             className="text-[clamp(9rem,44vw,14rem)] leading-none"
           />
           <h2
-            className="mt-4 font-display text-[clamp(2.75rem,12vw,4rem)] font-extrabold"
+            dir={item.rtl ? 'rtl' : undefined}
+            className={`mt-4 font-display text-[clamp(2.75rem,12vw,4rem)] font-extrabold ${
+              item.rtl ? 'font-urdu leading-[1.35]' : ''
+            }`}
             style={{ color: accent }}
           >
             {item.title}

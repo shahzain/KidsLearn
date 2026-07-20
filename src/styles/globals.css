@@ -35,6 +35,11 @@ body {
 .font-body {
   font-family: Nunito, system-ui, sans-serif;
 }
+/* Urdu / Arabic-script text — uses the device's installed Urdu font. */
+.font-urdu {
+  font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Urdu Typesetting',
+    'Geeza Pro', 'Segoe UI', 'Baloo 2', system-ui, sans-serif;
+}
 
 /* Hide scrollbars on snap/scroll containers while keeping scroll behaviour. */
 .no-scrollbar {

@@ -2,14 +2,32 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { HomeScreen } from './components/HomeScreen'
 import { CategoryScreen } from './components/CategoryScreen'
+import { DrawingScreen } from './components/DrawingScreen'
 import { useSpeech } from './hooks/useSpeech'
 import animals from './data/animals'
 import birds from './data/birds'
 import counting from './data/counting'
 import abc from './data/abc'
+import urdu from './data/urdu'
+import family from './data/family'
+import space from './data/space'
+import plants from './data/plants'
+import countries from './data/countries'
+import drawing from './data/drawing'
 import type { CategoryId } from './data/types'
 
-const CATEGORIES = [animals, birds, counting, abc]
+const CATEGORIES = [
+  animals,
+  birds,
+  counting,
+  abc,
+  urdu,
+  family,
+  space,
+  plants,
+  countries,
+  drawing,
+]
 
 export default function App() {
   const [activeId, setActiveId] = useState<CategoryId | null>(null)
@@ -57,7 +75,11 @@ export default function App() {
     <div className="fixed inset-0 overflow-hidden font-body text-slate-800">
       <AnimatePresence mode="wait" initial={false}>
         {active ? (
-          <CategoryScreen key={active.id} category={active} onBack={handleBack} />
+          active.kind === 'draw' ? (
+            <DrawingScreen key={active.id} category={active} onBack={handleBack} />
+          ) : (
+            <CategoryScreen key={active.id} category={active} onBack={handleBack} />
+          )
         ) : (
           <HomeScreen key="home" categories={CATEGORIES} onSelect={openCategory} />
         )}

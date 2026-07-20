@@ -2,57 +2,132 @@ import { useCallback, useEffect, useRef } from 'react'
 import { Howl } from 'howler'
 
 interface SpeakOptions {
-  /** Optional CC0 sound-effect file to layer under the spoken word (Howler.js). */
+  /** Optional sound-effect file to play after the words (Howler.js). */
   soundUrl?: string
+  /** BCP-47 language for the text, e.g. 'ur-PK'. Defaults to English. */
+  lang?: string
+  /** Romanised phrases spoken with an English voice when no {@link lang} voice exists. */
+  roman?: string[]
   rate?: number
   pitch?: number
 }
 
-// A bright, cheerful delivery (higher pitch than the flat default voice).
-const DEFAULT_RATE = 1
-const DEFAULT_PITCH = 1.3
-// Silence inserted between spoken phrases, e.g. "A" ⟶ (1s) ⟶ "A is for Apple".
+// Gentle, warm, cheerful delivery — a touch slow and softly bright, not chirpy.
+const DEFAULT_RATE = 0.9
+const DEFAULT_PITCH = 1.12
 const SEGMENT_PAUSE_MS = 1000
-// Short beat between saying an animal's name and playing its real recorded sound.
 const SOUND_DELAY_MS = 500
 
-// Well-known cheerful female English voices, in order of preference. Covers
-// iOS/macOS (Samantha…), Chrome (Google…) and Windows/Edge (Microsoft…).
-const FEMALE_VOICE_HINTS = [
-  'Samantha',
-  'Ava',
-  'Allison',
-  'Susan',
-  'Karen',
-  'Moira',
-  'Tessa',
-  'Fiona',
-  'Victoria',
-  'Google US English',
-  'Google UK English Female',
-  'Microsoft Aria',
-  'Microsoft Jenny',
-  'Microsoft Michelle',
-  'Microsoft Zira',
-  'Microsoft Hazel',
-  'Zoe',
-  'Nicky',
+// Natural / neural voices sound the most human.
+const NATURAL_MARKERS = [
+  'natural',
+  'neural',
+  'online',
+  'premium',
+  'enhanced',
+  'siri',
+  'google',
 ]
 
-/** Choose the most cheerful female English voice available on this device. */
-function pickFemaleVoice(
+// Known FEMALE voice names across iOS/macOS, Chrome and Edge/Windows.
+const FEMALE_NAMES = [
+  'samantha',
+  'ava',
+  'allison',
+  'susan',
+  'zoe',
+  'nicky',
+  'serena',
+  'karen',
+  'moira',
+  'tessa',
+  'fiona',
+  'victoria',
+  'kate',
+  'stephanie',
+  'aria',
+  'jenny',
+  'emma',
+  'michelle',
+  'clara',
+  'libby',
+  'sonia',
+  'zira',
+  'hazel',
+  'catherine',
+  'nora',
+  'joanna',
+  'salli',
+  'kimberly',
+  'amy',
+  'woman',
+  'female',
+  'google us english',
+  'google uk english female',
+]
+
+// Known MALE voice names to strongly avoid (so we never pick a male voice).
+const MALE_NAMES = [
+  'david',
+  'mark',
+  'guy',
+  'daniel',
+  'alex',
+  'fred',
+  'george',
+  'james',
+  'aaron',
+  'arthur',
+  'gordon',
+  'oliver',
+  'rishi',
+  'ryan',
+  'thomas',
+  'william',
+  'eddy',
+  'reed',
+  'rocko',
+  'albert',
+  'bruce',
+  'ralph',
+  'google uk english male',
+]
+
+const isFemaleName = (name: string) => FEMALE_NAMES.some((n) => name.includes(n))
+const isMaleName = (name: string) => MALE_NAMES.some((n) => name.includes(n))
+
+function scoreVoice(v: SpeechSynthesisVoice): number {
+  const name = v.name.toLowerCase()
+  let score = 0
+  // A cheerful FEMALE voice is the top priority for this app.
+  if (isFemaleName(name)) score += 1000
+  else if (isMaleName(name)) score -= 1000
+  // Then prefer natural / neural (human-sounding) voices.
+  if (NATURAL_MARKERS.some((m) => name.includes(m))) score += 100
+  const idx = FEMALE_NAMES.findIndex((n) => name.includes(n))
+  if (idx >= 0) score += 60 - idx
+  if (v.localService) score += 4
+  return score
+}
+
+function bestOf(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  if (!voices.length) return null
+  return voices.slice().sort((a, b) => scoreVoice(b) - scoreVoice(a))[0] ?? null
+}
+
+/** Best voice for a language; Urdu falls back to an Arabic-script reader. */
+function pickVoiceForLang(
   voices: SpeechSynthesisVoice[],
+  lang: string,
 ): SpeechSynthesisVoice | null {
-  const english = voices.filter((v) => v.lang.toLowerCase().startsWith('en'))
-  const pool = english.length ? english : voices
-  for (const hint of FEMALE_VOICE_HINTS) {
-    const needle = hint.toLowerCase()
-    const match = pool.find((v) => v.name.toLowerCase().includes(needle))
-    if (match) return match
+  const prefix = lang.slice(0, 2).toLowerCase()
+  const exact = voices.filter((v) => v.lang.toLowerCase().startsWith(prefix))
+  if (exact.length) return bestOf(exact)
+  if (prefix === 'ur') {
+    const arabic = voices.filter((v) => v.lang.toLowerCase().startsWith('ar'))
+    if (arabic.length) return bestOf(arabic)
   }
-  const female = pool.find((v) => /female|woman/i.test(v.name))
-  if (female) return female
-  return pool.find((v) => v.localService) ?? english[0] ?? voices[0] ?? null
+  return null
 }
 
 /**
@@ -71,7 +146,8 @@ export function useSpeech() {
   const synthRef = useRef<SpeechSynthesis | null>(
     supported ? window.speechSynthesis : null,
   )
-  const voiceRef = useRef<SpeechSynthesisVoice | null>(null)
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([])
+  const enVoiceRef = useRef<SpeechSynthesisVoice | null>(null)
   const unlockedRef = useRef(false)
   const soundCache = useRef<Map<string, Howl>>(new Map())
   const currentSoundRef = useRef<Howl | null>(null)
@@ -79,19 +155,22 @@ export function useSpeech() {
   // Bumped on every new speak()/cancel() so stale onend callbacks bail out.
   const speakIdRef = useRef(0)
 
-  // Pick a cheerful female English voice (updates when voices load async).
+  // Load voices + pick the best English voice (updates when voices load async).
   useEffect(() => {
     if (!supported) return
     const synth = synthRef.current
     if (!synth) return
-    const pick = () => {
+    const refresh = () => {
       const voices = synth.getVoices()
       if (!voices.length) return
-      voiceRef.current = pickFemaleVoice(voices)
+      voicesRef.current = voices
+      enVoiceRef.current =
+        bestOf(voices.filter((v) => v.lang.toLowerCase().startsWith('en'))) ??
+        bestOf(voices)
     }
-    pick()
-    synth.addEventListener?.('voiceschanged', pick)
-    return () => synth.removeEventListener?.('voiceschanged', pick)
+    refresh()
+    synth.addEventListener?.('voiceschanged', refresh)
+    return () => synth.removeEventListener?.('voiceschanged', refresh)
   }, [supported])
 
   const clearPauseTimer = useCallback(() => {
@@ -147,26 +226,11 @@ export function useSpeech() {
     })
   }, [])
 
-  const buildUtterance = useCallback(
-    (text: string, options: SpeakOptions) => {
-      const utterance = new SpeechSynthesisUtterance(text)
-      if (voiceRef.current) {
-        utterance.voice = voiceRef.current
-        utterance.lang = voiceRef.current.lang
-      } else {
-        utterance.lang = 'en-US'
-      }
-      utterance.rate = options.rate ?? DEFAULT_RATE
-      utterance.pitch = options.pitch ?? DEFAULT_PITCH
-      utterance.volume = 1
-      return utterance
-    },
-    [],
-  )
-
   /**
-   * Speak a name/phrase (or a list of phrases with pauses between), then — for
-   * animals & birds — play the real recorded sound just after the last phrase.
+   * Speak a phrase (or list of phrases with pauses between) in the item's
+   * language, then — when given — play a real recorded sound after the words.
+   * Non-English text falls back to its romanised form on an English voice when
+   * no matching-language voice is installed on the device.
    */
   const speak = useCallback(
     (text: string | string[], options: SpeakOptions = {}) => {
@@ -174,7 +238,7 @@ export function useSpeech() {
       clearPauseTimer()
       stopSound()
 
-      const segments = (Array.isArray(text) ? text : [text])
+      const native = (Array.isArray(text) ? text : [text])
         .map((s) => s.trim())
         .filter(Boolean)
 
@@ -185,8 +249,34 @@ export function useSpeech() {
       }
 
       const synth = synthRef.current
-      // No speech engine (or nothing to say) → just play the real sound.
-      if (!supported || !synth || !segments.length) {
+      if (!supported || !synth) {
+        playSoundIfCurrent()
+        return
+      }
+
+      // Choose a voice + which script to speak (native vs romanised fallback).
+      const lang = options.lang ?? 'en-US'
+      const isEnglish = lang.toLowerCase().startsWith('en')
+      let voice: SpeechSynthesisVoice | null
+      let segments: string[]
+      if (isEnglish) {
+        voice = enVoiceRef.current
+        segments = native
+      } else {
+        const langVoice = pickVoiceForLang(voicesRef.current, lang)
+        if (langVoice) {
+          voice = langVoice
+          segments = native
+        } else if (options.roman?.length) {
+          voice = enVoiceRef.current
+          segments = options.roman.map((s) => s.trim()).filter(Boolean)
+        } else {
+          voice = enVoiceRef.current
+          segments = native
+        }
+      }
+
+      if (!segments.length) {
         playSoundIfCurrent()
         return
       }
@@ -196,7 +286,16 @@ export function useSpeech() {
 
       const speakFrom = (index: number) => {
         if (speakIdRef.current !== runId) return
-        const utterance = buildUtterance(segments[index], options)
+        const utterance = new SpeechSynthesisUtterance(segments[index])
+        if (voice) {
+          utterance.voice = voice
+          utterance.lang = voice.lang
+        } else {
+          utterance.lang = isEnglish ? 'en-US' : lang
+        }
+        utterance.rate = options.rate ?? DEFAULT_RATE
+        utterance.pitch = options.pitch ?? DEFAULT_PITCH
+        utterance.volume = 1
         utterance.onend = () => {
           if (speakIdRef.current !== runId) return
           if (index + 1 < segments.length) {
@@ -205,7 +304,6 @@ export function useSpeech() {
               SEGMENT_PAUSE_MS,
             )
           } else if (options.soundUrl) {
-            // After the final phrase, play the real animal/bird sound.
             pauseTimerRef.current = window.setTimeout(
               playSoundIfCurrent,
               SOUND_DELAY_MS,
@@ -216,7 +314,7 @@ export function useSpeech() {
       }
       speakFrom(0)
     },
-    [supported, playSound, clearPauseTimer, stopSound, buildUtterance],
+    [supported, playSound, clearPauseTimer, stopSound],
   )
 
   const cancel = useCallback(() => {
